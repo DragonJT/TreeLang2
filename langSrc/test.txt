@@ -1,0 +1,19 @@
+
+void Main()
+{
+    InitWindow(800, 600, "Test");
+    SetTargetFPS(120);
+    var y = 20;
+    while !WindowShouldClose() 
+    {
+        BeginDrawing();
+        ClearBackground(BLUE);
+        DrawRectangle(50,y,200,200,RED);
+        EndDrawing();
+        y = y + 1;
+        if y > 450
+        {
+            y = 20;
+        }
+    }
+}
