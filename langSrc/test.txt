@@ -1,23 +1,23 @@
 
-void Print(){
-    WriteLine("HELLOWORLD");
+void DrawEquilateralTriangle(int x, int y, Color color)
+{
+    var a = Vector2(x-100, y+100);
+    var b = Vector2(x, y-100);
+    var c = Vector2(x+100, y+100);
+    DrawTriangle(a,c,b,color);
 }
 
 void Main()
 {
     InitWindow(800, 600, "Test");
     SetTargetFPS(120);
-    var x = 200;
     var y = 20;
-    Print();
     while !WindowShouldClose() 
     {
         BeginDrawing();
         ClearBackground(BLUE);
-        var a = Vector2(x-100, y+100);
-        var b = Vector2(x, y-100);
-        var c = Vector2(x+100, y+100);
-        DrawTriangle(a,c,b,RED);
+        DrawEquilateralTriangle(200, y, RED);
+        DrawEquilateralTriangle(400, y, GREEN);
         EndDrawing();
         y = y + 1;
         if y > 450

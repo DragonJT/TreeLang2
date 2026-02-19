@@ -166,6 +166,7 @@ static class VM
     readonly static Dictionary<string, object> globals = [];
     readonly static Stack<FunctionScopes> functionScopesStack = [];
     readonly static FunctionCalls functionCalls = new();
+    readonly static Dictionary<string, Type> types = [];
 
     static object GetIdentifier(string name)
     {
@@ -189,13 +190,6 @@ static class VM
         globals.Add("GREEN", Color.Green);
 
         //Trees
-        trees.Add("Function", t =>
-        {
-            functionScopesStack.Push(new());
-            var returnValue = t.GetField("Statements").Run();
-            functionScopesStack.Pop();
-            return returnValue;
-        });
         trees.Add("Statements", t =>
         {
             var functionScope = functionScopesStack.Peek();
@@ -328,12 +322,35 @@ static class VM
             return call.returnType;
         });
 
+
+        types.Add("int", typeof(int));
+        types.Add("float", typeof(float));
+        types.Add("void", typeof(void));
+        types.Add("Vector2", typeof(Vector2));
+        types.Add("Color", typeof(Color));
+
         foreach(var c in root.children)
         {
-            functionCalls.AddCall(c.GetField("Name").value, typeof(void), [], a =>
+            var parameters = c.GetField("Parameters").children;
+            var parameterTypes = parameters
+                .Select(p=>types[p.GetField("Type").value])
+                .ToArray();
+            var parameterNames = parameters.Select(p => p.GetField("Name").value).ToArray();
+            var returnType = types[c.GetField("Type").value];
+
+            functionCalls.AddCall(c.GetField("Name").value, returnType, parameterTypes, a =>
             {
-                c.Run();
-                return null;
+                var functionScopes = new FunctionScopes();
+                functionScopesStack.Push(functionScopes);
+                functionScopes.PushScope();
+                
+                for(var i = 0; i < a.Length; i++)
+                {
+                    functionScopes.CreateVar(parameterNames[i], a[i]);
+                } 
+                var returnValue = c.GetField("Statements").Run();
+                functionScopesStack.Pop();
+                return returnValue;
             });
         }
         functionCalls.AddCSharpTypes([typeof(Raylib), typeof(Vector2), typeof(Console)]);
