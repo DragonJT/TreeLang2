@@ -3,12 +3,16 @@ void Main()
 {
     InitWindow(800, 600, "Test");
     SetTargetFPS(120);
+    var x = 200;
     var y = 20;
     while !WindowShouldClose() 
     {
         BeginDrawing();
         ClearBackground(BLUE);
-        DrawRectangle(50,y,200,200,RED);
+        var a = Vector2(x-100, y+100);
+        var b = Vector2(x, y-100);
+        var c = Vector2(x+100, y+100);
+        DrawTriangle(a,c,b,RED);
         EndDrawing();
         y = y + 1;
         if y > 450

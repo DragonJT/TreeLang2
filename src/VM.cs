@@ -1,5 +1,6 @@
 using Raylib_cs;
 using System.Reflection;
+using System.Numerics;
 
 class FunctionScopes
 {
@@ -53,22 +54,85 @@ class FunctionScopes
     }
 }
 
-static class VM
+class Call(string name, Type returnType, Type[] parameters, Func<object[], object> func)
 {
-    readonly static Dictionary<string, Func<Tree, object>> trees = [];
-    readonly static Dictionary<string, Func<Tree, Type>> treeTypes = [];
-    readonly static Dictionary<string, object> globals = [];
-    readonly static Stack<FunctionScopes> functionScopesStack = [];
+    public readonly string name = name;
+    public readonly Type returnType = returnType;
+    public readonly Type[] parameters = parameters;
+    public readonly Func<object[], object> func = func;
 
-    static bool IsMatch(MethodInfo method, Type[] types)
+    public object Invoke(object[] args)
     {
-        var parameters = method.GetParameters();
-        var length = parameters.Length;
-        if(length == types.Length)
+        return func(args);
+    }
+
+    public override string ToString()
+    {
+        return $"{returnType} {name}({string.Join(", ", parameters.Select(p=>p.Name).ToArray())})";
+    }
+}
+
+class FunctionCalls
+{
+    readonly List<Call> calls = [];
+
+    public FunctionCalls(Type[] types)
+    {
+        foreach(var type in types)
         {
-            for(var i = 0; i < length; i++)
+            var constructors = type.GetConstructors();
+            foreach(var c in constructors)
             {
-                if(parameters[i].ParameterType != types[i])
+                calls.Add(new(
+                    type.Name, 
+                    type, 
+                    [..c.GetParameters().Select(p=>p.ParameterType)],
+                    c.Invoke));
+            }
+
+            var staticMethods = type.GetMethods(BindingFlags.Public | BindingFlags.Static);
+            foreach(var m in staticMethods)
+            {
+                if(m.ReturnType == typeof(CBool))
+                {
+                    calls.Add(new(
+                        m.Name,
+                        typeof(bool),
+                        [..m.GetParameters().Select(p=>p.ParameterType)],
+                        a => (bool)(CBool)m.Invoke(null, a)));
+                }
+                else
+                {
+                    calls.Add(new(
+                        m.Name, 
+                        m.ReturnType,
+                        [.. m.GetParameters().Select(p=>p.ParameterType)], 
+                        a => m.Invoke(null, a)));
+                }
+            }
+        }
+    }
+
+    static bool IsAssignableToOrConvertableTo(Type a, Type b)
+    {
+        if (a.IsAssignableTo(b))
+        {
+            return true;
+        }
+        else if(a == typeof(int) && b == typeof(float))
+        {
+            return true;
+        }
+        return false;
+    }
+
+    static bool IsMatch(Type[] argTypes, Type[] paramTypes)
+    {
+        if(argTypes.Length == paramTypes.Length)
+        {
+            for(var i = 0; i < argTypes.Length; i++)
+            {
+                if(!IsAssignableToOrConvertableTo(argTypes[i], paramTypes[i]))
                 {
                     return false;
                 }
@@ -77,6 +141,26 @@ static class VM
         }
         return false;
     }
+
+    public Call GetCall(string name, Type[] argTypes)
+    {
+        var call = calls.FirstOrDefault(c => c.name == name && IsMatch(argTypes, c.parameters));
+        if(call == null)
+        {
+            var str = name+": ("+string.Join(", ", argTypes.Select(a=>a.Name).ToArray())+")";
+            throw new Exception(str);
+        }
+        return call;
+    }
+}
+
+static class VM
+{
+    readonly static Dictionary<string, Func<Tree, object>> trees = [];
+    readonly static Dictionary<string, Func<Tree, Type>> treeTypes = [];
+    readonly static Dictionary<string, object> globals = [];
+    readonly static Stack<FunctionScopes> functionScopesStack = [];
+    readonly static FunctionCalls functionCalls = new([typeof(Raylib), typeof(Vector2), typeof(Console)]);
 
     static object GetIdentifier(string name)
     {
@@ -191,19 +275,9 @@ static class VM
         {
             var name = t.GetField("Name").value;
             var args = t.GetField("Arguments");
-            var argTypes = args.children.Select(a=>a.CalculateType()).ToArray();
-            var argValues = args.children.Select(c=>c.Run()).ToArray();
-            var methods = typeof(Raylib).GetMethods(BindingFlags.Public|BindingFlags.Static);
-            var method = methods.First(m=>m.Name == name && IsMatch(m, argTypes));
-            var returnValue = method.Invoke(null, argValues);
-            if(method.ReturnType == typeof(CBool))
-            {
-                return (bool)(CBool)returnValue;
-            }
-            else
-            {
-                return returnValue;
-            }
+            var argTypes = args.children.Select(CalculateType).ToArray();
+            var call = functionCalls.GetCall(name, argTypes);
+            return call.Invoke([.. args.children.Select(a=>a.Run())]);
         });
         trees.Add("CallStmt", t =>
         {
@@ -248,18 +322,9 @@ static class VM
         {
             var name = t.GetField("Name").value;
             var args = t.GetField("Arguments");
-            var argTypes = args.children.Select(a=>a.CalculateType()).ToArray();
-            var methods = typeof(Raylib).GetMethods(BindingFlags.Public|BindingFlags.Static);
-            var method = methods.First(m=>m.Name == name && IsMatch(m, argTypes));
-            var returnType = method.ReturnType;
-            if(returnType == typeof(CBool))
-            {
-                return typeof(bool);
-            }
-            else
-            {
-                return returnType;
-            }
+            var argTypes = args.children.Select(CalculateType).ToArray();
+            var call = functionCalls.GetCall(name, argTypes);
+            return call.returnType;
         });
     }
 
