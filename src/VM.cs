@@ -76,7 +76,7 @@ class FunctionCalls
 {
     readonly List<Call> calls = [];
 
-    public FunctionCalls(Type[] types)
+    public void AddCSharpTypes(Type[] types)
     {
         foreach(var type in types)
         {
@@ -111,6 +111,11 @@ class FunctionCalls
                 }
             }
         }
+    }
+
+    public void AddCall(string name, Type returnType, Type[] parameters, Func<object[], object> func)
+    {
+        calls.Add(new (name, returnType, parameters, func));
     }
 
     static bool IsAssignableToOrConvertableTo(Type a, Type b)
@@ -160,7 +165,7 @@ static class VM
     readonly static Dictionary<string, Func<Tree, Type>> treeTypes = [];
     readonly static Dictionary<string, object> globals = [];
     readonly static Stack<FunctionScopes> functionScopesStack = [];
-    readonly static FunctionCalls functionCalls = new([typeof(Raylib), typeof(Vector2), typeof(Console)]);
+    readonly static FunctionCalls functionCalls = new();
 
     static object GetIdentifier(string name)
     {
@@ -175,7 +180,7 @@ static class VM
         }
     }
 
-    public static void Init()
+    public static void Init(Tree root)
     {
         //Globals
         globals.Add("BLUE", Color.Blue);
@@ -184,10 +189,6 @@ static class VM
         globals.Add("GREEN", Color.Green);
 
         //Trees
-        trees.Add("Root", t =>
-        {
-            return t.children.First(c=>c.GetField("Name").value == "Main").Run();
-        });
         trees.Add("Function", t =>
         {
             functionScopesStack.Push(new());
@@ -326,9 +327,26 @@ static class VM
             var call = functionCalls.GetCall(name, argTypes);
             return call.returnType;
         });
+
+        foreach(var c in root.children)
+        {
+            functionCalls.AddCall(c.GetField("Name").value, typeof(void), [], a =>
+            {
+                c.Run();
+                return null;
+            });
+        }
+        functionCalls.AddCSharpTypes([typeof(Raylib), typeof(Vector2), typeof(Console)]);
     }
 
-    public static object Run(this Tree tree)
+    public static object Call(string name, object[] args)
+    {
+        var call = functionCalls.GetCall(name, [..args.Select(a=>a.GetType())]);
+        call.Invoke(args);
+        return call.returnType;
+    }
+
+    static object Run(this Tree tree)
     {
         return trees[tree.name](tree);
     }

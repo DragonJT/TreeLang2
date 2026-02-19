@@ -1,10 +1,15 @@
 
+void Print(){
+    WriteLine("HELLOWORLD");
+}
+
 void Main()
 {
     InitWindow(800, 600, "Test");
     SetTargetFPS(120);
     var x = 200;
     var y = 20;
+    Print();
     while !WindowShouldClose() 
     {
         BeginDrawing();

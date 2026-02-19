@@ -10,8 +10,8 @@ static class Program
         {
             Console.WriteLine(result.tree);
             Console.WriteLine("=======================");
-            VM.Init();
-            result.tree.Run();
+            VM.Init(result.tree);
+            VM.Call("Main", []);
         }
         else
         {
