@@ -54,11 +54,11 @@ class FunctionScopes
     }
 }
 
-class Call(string name, Type returnType, Type[] parameters, Func<object[], object> func)
+class Call(string name, Type returnType, Type[] paramTypes, Func<object[], object> func)
 {
     public readonly string name = name;
     public readonly Type returnType = returnType;
-    public readonly Type[] parameters = parameters;
+    public readonly Type[] paramTypes = paramTypes;
     public readonly Func<object[], object> func = func;
 
     public object Invoke(object[] args)
@@ -68,7 +68,7 @@ class Call(string name, Type returnType, Type[] parameters, Func<object[], objec
 
     public override string ToString()
     {
-        return $"{returnType} {name}({string.Join(", ", parameters.Select(p=>p.Name).ToArray())})";
+        return $"{returnType} {name}({string.Join(", ", paramTypes.Select(p=>p.Name).ToArray())})";
     }
 }
 
@@ -118,26 +118,13 @@ class FunctionCalls
         calls.Add(new (name, returnType, parameters, func));
     }
 
-    static bool IsAssignableToOrConvertableTo(Type a, Type b)
-    {
-        if (a.IsAssignableTo(b))
-        {
-            return true;
-        }
-        else if(a == typeof(int) && b == typeof(float))
-        {
-            return true;
-        }
-        return false;
-    }
-
     static bool IsMatch(Type[] argTypes, Type[] paramTypes)
     {
         if(argTypes.Length == paramTypes.Length)
         {
             for(var i = 0; i < argTypes.Length; i++)
             {
-                if(!IsAssignableToOrConvertableTo(argTypes[i], paramTypes[i]))
+                if(argTypes[i] != paramTypes[i])
                 {
                     return false;
                 }
@@ -149,7 +136,7 @@ class FunctionCalls
 
     public Call GetCall(string name, Type[] argTypes)
     {
-        var call = calls.FirstOrDefault(c => c.name == name && IsMatch(argTypes, c.parameters));
+        var call = calls.FirstOrDefault(c => c.name == name && IsMatch(argTypes, c.paramTypes));
         if(call == null)
         {
             var str = name+": ("+string.Join(", ", argTypes.Select(a=>a.Name).ToArray())+")";
@@ -183,6 +170,9 @@ static class VM
 
     public static void Init(Tree root)
     {
+        string[] binaryOps = ["+", "-", "*"];
+        string[] unaryOps = ["!"];
+
         //Globals
         globals.Add("BLUE", Color.Blue);
         globals.Add("WHITE", Color.White);
@@ -207,32 +197,34 @@ static class VM
         });
         trees.Add("Number", t =>
         {
+            if (t.value.Contains('.'))
+            {
+                return float.Parse(t.value);
+            }
             return int.Parse(t.value);
         });
         trees.Add("String", t =>
         {
             return t.value[1..^1];
         });
-        trees.Add("+", t=>
+
+        foreach(var op in binaryOps)
         {
-            return (int)t.children[0].Run() + (int)t.children[1].Run();
-        });
-        trees.Add("-", t=>
+            trees.Add(op, t=>
+            {
+                var call = functionCalls.GetCall(op, [t.children[0].CalculateType(), t.children[1].CalculateType()]);
+                return call.Invoke([t.children[0].Run(), t.children[1].Run()]);
+            });
+        }
+        foreach(var op in unaryOps)
         {
-            return (int)t.children[0].Run() - (int)t.children[1].Run();
-        });
-        trees.Add("<", t=>
-        {
-            return (int)t.children[0].Run() < (int)t.children[1].Run();
-        });
-        trees.Add(">", t=>
-        {
-            return (int)t.children[0].Run() > (int)t.children[1].Run();
-        });
-        trees.Add("!", t=>
-        {
-            return !(bool)t.children[0].Run();
-        });
+            trees.Add(op, t=>
+            {
+                var call = functionCalls.GetCall(op, [t.children[0].CalculateType()]);
+                return call.Invoke([t.children[0].Run()]);
+            });
+        }
+        
         trees.Add("WhileStmt", t =>
         {
             while ((bool)t.children[0].Run())
@@ -287,32 +279,34 @@ static class VM
         });
         treeTypes.Add("Number", t =>
         {
+            if(t.value.Contains('.'))
+            {
+                return typeof(float);
+            }
             return typeof(int);
         });
         treeTypes.Add("String", t =>
         {
             return typeof(string);
         });
-        treeTypes.Add("+", t=>
+        
+        foreach(var op in binaryOps)
         {
-            return typeof(int);
-        });
-        treeTypes.Add("-", t=>
+            treeTypes.Add(op, t=>
+            {
+                var call = functionCalls.GetCall(op, [t.children[0].CalculateType(), t.children[1].CalculateType()]);
+                return call.returnType;
+            });
+        }
+        foreach(var op in unaryOps)
         {
-            return typeof(int);
-        });
-        treeTypes.Add("<", t=>
-        {
-            return typeof(bool);
-        });
-        treeTypes.Add(">", t=>
-        {
-            return typeof(bool);
-        });
-        treeTypes.Add("!", t=>
-        {
-            return typeof(bool);
-        });
+            treeTypes.Add(op, t=>
+            {
+                var call = functionCalls.GetCall(op, [t.children[0].CalculateType()]);
+                return call.returnType;
+            });
+        }
+        
         treeTypes.Add("Call", t =>
         {
             var name = t.GetField("Name").value;
@@ -328,6 +322,7 @@ static class VM
         types.Add("void", typeof(void));
         types.Add("Vector2", typeof(Vector2));
         types.Add("Color", typeof(Color));
+        types.Add("Matrix3x2", typeof(Matrix3x2));
 
         foreach(var c in root.children)
         {
@@ -353,14 +348,22 @@ static class VM
                 return returnValue;
             });
         }
-        functionCalls.AddCSharpTypes([typeof(Raylib), typeof(Vector2), typeof(Console)]);
+        functionCalls.AddCall("!", typeof(bool), [typeof(bool)], a=>!(bool)a[0]);
+        functionCalls.AddCall("+", typeof(float), [typeof(float), typeof(float)], a=>(float)a[0] + (float)a[1]);
+        functionCalls.AddCall("+", typeof(int), [typeof(int), typeof(int)], a=>(int)a[0] + (int)a[1]);
+        functionCalls.AddCall("-", typeof(float), [typeof(float), typeof(float)], a=>(float)a[0] - (float)a[1]);
+        functionCalls.AddCall("-", typeof(int), [typeof(int), typeof(int)], a=>(int)a[0] - (int)a[1]);
+        functionCalls.AddCall("*", typeof(float), [typeof(float), typeof(float)], a=>(float)a[0] * (float)a[1]);
+        functionCalls.AddCall("*", typeof(int), [typeof(int), typeof(int)], a=>(int)a[0] * (int)a[1]);
+        functionCalls.AddCall("*", typeof(Matrix3x2), [typeof(Matrix3x2), typeof(Matrix3x2)], a=>(Matrix3x2)a[0] * (Matrix3x2)a[1]);
+
+        functionCalls.AddCSharpTypes([typeof(Raylib), typeof(Vector2), typeof(Console), typeof(Matrix3x2)]);
     }
 
     public static object Call(string name, object[] args)
     {
         var call = functionCalls.GetCall(name, [..args.Select(a=>a.GetType())]);
-        call.Invoke(args);
-        return call.returnType;
+        return call.Invoke(args);
     }
 
     static object Run(this Tree tree)

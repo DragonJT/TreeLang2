@@ -1,28 +1,29 @@
 
-void DrawEquilateralTriangle(int x, int y, Color color)
+void DrawEquilateralTriangle(Vector2 position, float radians, float radius, Color color)
 {
-    var a = Vector2(x-100, y+100);
-    var b = Vector2(x, y-100);
-    var c = Vector2(x+100, y+100);
-    DrawTriangle(a,c,b,color);
+    var a = Vector2(0.0 - radius, radius);
+    var b = Vector2(0.0, 0.0 - radius);
+    var c = Vector2(radius, radius);
+    var rotMatrix = CreateRotation(radians);
+    var transMatrix = CreateTranslation(position);
+    var matrix = rotMatrix * transMatrix;
+    var v1 = Transform(a, matrix);
+    var v2 = Transform(b, matrix);
+    var v3 = Transform(c, matrix);
+    DrawTriangle(v1,v3,v2,color);
 }
 
 void Main()
 {
     InitWindow(800, 600, "Test");
     SetTargetFPS(120);
-    var y = 20;
+    var radians = 0.0;
     while !WindowShouldClose() 
     {
         BeginDrawing();
         ClearBackground(BLUE);
-        DrawEquilateralTriangle(200, y, RED);
-        DrawEquilateralTriangle(400, y, GREEN);
+        DrawEquilateralTriangle(Vector2(400.0,300.0), radians, 100.0, RED);
         EndDrawing();
-        y = y + 1;
-        if y > 450
-        {
-            y = 20;
-        }
+        radians = radians + 0.01;
     }
 }

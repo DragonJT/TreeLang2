@@ -262,7 +262,7 @@ static class Parser
         parsers.Add("Number", new Number());
         parsers.Add("String", new String());
         parsers.Add("UOps", new UnaryOperators("!", "Expr"));
-        parsers.Add("Ops", new BinaryOperators(["< >", "+ -"], "Expr"));
+        parsers.Add("Ops", new BinaryOperators(["< >", "* /", "+ -"], "Expr"));
         parsers.Add("Call", new Obj("Name(Arguments)"));
         parsers.Add("Expr", new Expression("Ops UOps Call Number String Identifier"));
         parsers.Add("Arguments", new SplitArr("Expr", ","));
@@ -292,18 +292,6 @@ static class Parser
             }
         }
         return new ParsedResult(false, reader, null);
-    }
-
-    static Tree GetTree(this ParsedResult parsedResult)
-    {
-        if (parsedResult.valid)
-        {
-            return parsedResult.tree;   
-        }
-        else
-        {
-            return new Tree("Error", "...");
-        }
     }
 
     public static ParsedResult Parse(string name, TokenReader reader)
@@ -426,12 +414,21 @@ static class Parser
         {
             foreach(var og in binaryOperators.opGroups)
             {
-                if(reader.SplitTokensWithOperators(og, out string op, out var left, out var right))
+                if(reader.SplitTokensWithOperators(og, out string op, out var leftTokens, out var rightTokens))
                 {
-                    var tree = new Tree(op, null);
-                    tree.children.Add(Parse(binaryOperators.parse, new TokenReader(left)).GetTree());
-                    tree.children.Add(Parse(binaryOperators.parse, new TokenReader(right)).GetTree());
-                    return new ParsedResult(true, reader.End(), tree);
+                    var left = Parse(binaryOperators.parse, new TokenReader(leftTokens));
+                    var right = Parse(binaryOperators.parse, new TokenReader(rightTokens));
+                    if(left.valid && right.valid)
+                    {
+                        var tree = new Tree(op, null);
+                        tree.children.Add(left.tree);
+                        tree.children.Add(right.tree);
+                        return new ParsedResult(true, reader.End(), tree);
+                    }
+                    else
+                    {
+                        return new ParsedResult(false, reader.End(), null);   
+                    }
                 }
             }
             return new ParsedResult(false, reader, null);
@@ -442,9 +439,17 @@ static class Parser
             {
                 if(reader.UnaryOperators(uo, out var tokens))
                 {
-                    var tree = new Tree(uo, null);
-                    tree.children.Add(Parse(unaryOperators.parse, new TokenReader(tokens)).GetTree());
-                    return new ParsedResult(true, reader.End(), tree);
+                    var operand = Parse(unaryOperators.parse, new TokenReader(tokens));
+                    if (operand.valid)
+                    {
+                        var tree = new Tree(uo, null);
+                        tree.children.Add(operand.tree);
+                        return new ParsedResult(true, reader.End(), tree);
+                    }
+                    else
+                    {
+                        return new ParsedResult(false, reader.End(), null);
+                    }
                 }
             }
             return new ParsedResult(false, reader, null);
