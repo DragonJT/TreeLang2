@@ -76,39 +76,36 @@ class FunctionCalls
 {
     readonly List<Call> calls = [];
 
-    public void AddCSharpTypes(Type[] types)
+    public void AddCSharpType(Type type)
     {
-        foreach(var type in types)
+        var constructors = type.GetConstructors();
+        foreach(var c in constructors)
         {
-            var constructors = type.GetConstructors();
-            foreach(var c in constructors)
+            calls.Add(new(
+                type.Name, 
+                type, 
+                [..c.GetParameters().Select(p=>p.ParameterType)],
+                c.Invoke));
+        }
+
+        var staticMethods = type.GetMethods(BindingFlags.Public | BindingFlags.Static);
+        foreach(var m in staticMethods)
+        {
+            if(m.ReturnType == typeof(CBool))
             {
                 calls.Add(new(
-                    type.Name, 
-                    type, 
-                    [..c.GetParameters().Select(p=>p.ParameterType)],
-                    c.Invoke));
+                    m.Name,
+                    typeof(bool),
+                    [..m.GetParameters().Select(p=>p.ParameterType)],
+                    a => (bool)(CBool)m.Invoke(null, a)));
             }
-
-            var staticMethods = type.GetMethods(BindingFlags.Public | BindingFlags.Static);
-            foreach(var m in staticMethods)
+            else
             {
-                if(m.ReturnType == typeof(CBool))
-                {
-                    calls.Add(new(
-                        m.Name,
-                        typeof(bool),
-                        [..m.GetParameters().Select(p=>p.ParameterType)],
-                        a => (bool)(CBool)m.Invoke(null, a)));
-                }
-                else
-                {
-                    calls.Add(new(
-                        m.Name, 
-                        m.ReturnType,
-                        [.. m.GetParameters().Select(p=>p.ParameterType)], 
-                        a => m.Invoke(null, a)));
-                }
+                calls.Add(new(
+                    m.Name, 
+                    m.ReturnType,
+                    [.. m.GetParameters().Select(p=>p.ParameterType)], 
+                    a => m.Invoke(null, a)));
             }
         }
     }
@@ -176,8 +173,13 @@ static class VM
         //Globals
         globals.Add("BLUE", Color.Blue);
         globals.Add("WHITE", Color.White);
+        globals.Add("BLACK", Color.Black);
         globals.Add("RED", Color.Red);
         globals.Add("GREEN", Color.Green);
+
+        globals.Add("LEFT", KeyboardKey.Left);
+        globals.Add("RIGHT", KeyboardKey.Right);
+        globals.Add("PERSPECTIVE", CameraProjection.Perspective);
 
         //Trees
         trees.Add("Statements", t =>
@@ -317,12 +319,17 @@ static class VM
         });
 
 
+        types.Add("Raylib", typeof(Raylib));
+        types.Add("Console", typeof(Console));
         types.Add("int", typeof(int));
         types.Add("float", typeof(float));
         types.Add("void", typeof(void));
         types.Add("Vector2", typeof(Vector2));
-        types.Add("Color", typeof(Color));
         types.Add("Matrix3x2", typeof(Matrix3x2));
+        types.Add("Color", typeof(Color));
+        types.Add("Matrix4x4", typeof(Matrix4x4));
+        types.Add("Vector3", typeof(Vector3));
+        types.Add("Camera3D", typeof(Camera3D));
 
         foreach(var c in root.children)
         {
@@ -357,7 +364,10 @@ static class VM
         functionCalls.AddCall("*", typeof(int), [typeof(int), typeof(int)], a=>(int)a[0] * (int)a[1]);
         functionCalls.AddCall("*", typeof(Matrix3x2), [typeof(Matrix3x2), typeof(Matrix3x2)], a=>(Matrix3x2)a[0] * (Matrix3x2)a[1]);
 
-        functionCalls.AddCSharpTypes([typeof(Raylib), typeof(Vector2), typeof(Console), typeof(Matrix3x2)]);
+        foreach(var t in types.Values)
+        {
+            functionCalls.AddCSharpType(t);
+        }
     }
 
     public static object Call(string name, object[] args)
