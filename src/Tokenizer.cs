@@ -18,7 +18,7 @@ class Token(TokenKind kind, string value)
 static class Tokenizer
 {
     static readonly HashSet<string> operators = ["!", "+", "-", "*", "/", "&", "|", "=", "<", ">", 
-        "<=", ">=", "&&", "||", "==", "++", "--"];
+        "<=", ">=", "&&", "||", "==", "++", "--", "+=", "*=", "/=", "-="];
     static readonly HashSet<string> keywords = ["struct", "true", "false", "while", "var", "if"];
 
     static bool IsDigit(char c)

@@ -1,6 +1,4 @@
 ﻿
-using Raylib_cs;
-
 static class Program
 {
     static void Main()

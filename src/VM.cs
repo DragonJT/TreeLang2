@@ -110,6 +110,16 @@ class FunctionCalls
         }
     }
 
+    public void AddCall1<T,TR>(string name, Func<T,TR> func)
+    {
+        calls.Add(new (name, typeof(TR), [typeof(T)], a=>func((T)a[0])));
+    }
+
+    public void AddCall2<T1,T2,TR>(string name, Func<T1,T2,TR> func)
+    {
+        calls.Add(new (name, typeof(TR), [typeof(T1), typeof(T2)], a=>func((T1)a[0], (T2)a[1])));
+    }
+
     public void AddCall(string name, Type returnType, Type[] parameters, Func<object[], object> func)
     {
         calls.Add(new (name, returnType, parameters, func));
@@ -167,7 +177,8 @@ static class VM
 
     public static void Init(Tree root)
     {
-        string[] binaryOps = ["+", "-", "*"];
+        string[] assignOps = ["+", "-", "*", "/"];
+        string[] binaryOps = ["+", "-", "*", "/", ">", "<"];
         string[] unaryOps = ["!"];
 
         //Globals
@@ -243,14 +254,36 @@ static class VM
             functionScope.CreateVar(name, value);
             return null;
         });
-        trees.Add("AssignStmt", t =>
+        trees.Add("=", t =>
         {
-            var name = t.GetField("Name").value;
+            var name = t.children[0].value;
             var value = t.children[1].Run();
             var functionScope = functionScopesStack.Peek();
             functionScope.TrySetVar(name, value);
             return null;
         });
+
+        foreach(var assignOp in assignOps)
+        {
+            trees.Add(assignOp+"=", t =>
+            {
+                var name = t.children[0].value;
+                var b = t.children[1].Run();
+                var btype = t.children[1].CalculateType();
+                var functionScope = functionScopesStack.Peek();
+                if (functionScope.TryGetVar(name, out var a))
+                {
+                    var call = functionCalls.GetCall(assignOp, [a.GetType(), btype]);
+                    functionScope.TrySetVar(name, call.Invoke([a,b]));
+                }
+                else
+                {
+                    throw new Exception($"Cant find variable: {name}");
+                }
+                return null;
+            });
+        }
+        
         trees.Add("IfStmt", t =>
         {
             var condition = t.children[0].Run();
@@ -268,9 +301,9 @@ static class VM
             var call = functionCalls.GetCall(name, argTypes);
             return call.Invoke([.. args.children.Select(a=>a.Run())]);
         });
-        trees.Add("CallStmt", t =>
+        trees.Add("ExprStmt", t =>
         {
-            t.GetField("Call").Run();
+            t.children[0].Run();
             return null;
         });
 
@@ -355,14 +388,20 @@ static class VM
                 return returnValue;
             });
         }
-        functionCalls.AddCall("!", typeof(bool), [typeof(bool)], a=>!(bool)a[0]);
-        functionCalls.AddCall("+", typeof(float), [typeof(float), typeof(float)], a=>(float)a[0] + (float)a[1]);
-        functionCalls.AddCall("+", typeof(int), [typeof(int), typeof(int)], a=>(int)a[0] + (int)a[1]);
-        functionCalls.AddCall("-", typeof(float), [typeof(float), typeof(float)], a=>(float)a[0] - (float)a[1]);
-        functionCalls.AddCall("-", typeof(int), [typeof(int), typeof(int)], a=>(int)a[0] - (int)a[1]);
-        functionCalls.AddCall("*", typeof(float), [typeof(float), typeof(float)], a=>(float)a[0] * (float)a[1]);
-        functionCalls.AddCall("*", typeof(int), [typeof(int), typeof(int)], a=>(int)a[0] * (int)a[1]);
-        functionCalls.AddCall("*", typeof(Matrix3x2), [typeof(Matrix3x2), typeof(Matrix3x2)], a=>(Matrix3x2)a[0] * (Matrix3x2)a[1]);
+
+        functionCalls.AddCall1<bool,bool>("!", a=>!a);
+        functionCalls.AddCall2<float,float,float>("+", (a, b)=>a + b);
+        functionCalls.AddCall2<int,int,int>("+", (a, b)=>a + b);
+        functionCalls.AddCall2<float,float,float>("-", (a, b)=>a - b);
+        functionCalls.AddCall2<int,int,int>("-", (a, b)=>a - b);
+        functionCalls.AddCall2<float,float,float>("*", (a,b)=>a*b);
+        functionCalls.AddCall2<int,int,int>("*", (a,b)=>a*b);
+        functionCalls.AddCall2<Matrix3x2,Matrix3x2,Matrix3x2>("*", (a,b)=>a*b);
+        functionCalls.AddCall2<Matrix4x4,Matrix4x4,Matrix4x4>("*", (a,b)=>a*b);
+        functionCalls.AddCall2<float,float,bool>(">", (a,b)=>a>b);
+        functionCalls.AddCall2<int,int,bool>(">", (a,b)=>a>b);
+        functionCalls.AddCall2<float,float,bool>("<", (a,b)=>a<b);
+        functionCalls.AddCall2<int,int,bool>("<", (a,b)=>a<b);
 
         foreach(var t in types.Values)
         {

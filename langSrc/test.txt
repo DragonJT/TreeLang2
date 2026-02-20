@@ -4,9 +4,11 @@ void Main()
     InitWindow(800, 600, "Test");
     SetTargetFPS(120);
     var camera = Camera3D(Vector3(5.0,10.0,10.0), Vector3(0.0,0.0,0.0), Vector3(0.0,1.0,0.0), 45.0, PERSPECTIVE);
-    var cubePosition = Vector3(0.0,0.0,0.0);
+    var y = 0.0;
+    var dir = 0.02;
     while !WindowShouldClose() 
     {
+        var cubePosition = Vector3(0.0,y,0.0);
         BeginDrawing();
         ClearBackground(BLUE);
         BeginMode3D(camera);
@@ -14,5 +16,14 @@ void Main()
         DrawCubeWires(cubePosition, 2.0f, 2.0f, 2.0f, BLACK);
         EndMode3D();
         EndDrawing();
+        y += dir;
+        if y > 5.0
+        {
+            dir = 0.0-0.02;
+        }
+        if y < 0.0
+        {
+            dir = 0.02;
+        }
     }
 }
